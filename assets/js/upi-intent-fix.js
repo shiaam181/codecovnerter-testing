@@ -1,5 +1,5 @@
 /**
- * UPI Intent URL Fix
+ * UPI Intent URL Fix v2.0
  * 
  * This script fixes UPI payment intent URLs to avoid "Risk Threshold Exceeded"
  * and "Transaction may be risky" errors in Google Pay, PhonePe, Paytm, etc.
@@ -15,11 +15,13 @@
  * - Properly URL-encodes all values
  * 
  * USAGE:
- * Include this script on your checkout/order page AFTER your UPI buttons are rendered.
- * It will automatically intercept clicks on any link with href starting with "upi://pay"
- * and fix the URL before the UPI app opens.
+ * Include this script on ANY page with UPI links (checkout, order, admin):
+ *   <script src="/assets/js/upi-intent-fix.js"></script>
  * 
- * Or call UPIIntentFix.buildUrl() directly to generate proper URLs.
+ * It auto-intercepts all UPI link clicks and fixes them.
+ * 
+ * To show a TEST panel in admin:
+ *   UPIIntentFix.showTestPanel({ pa: 'your@upi', pn: 'Name' });
  */
 
 (function() {
@@ -196,6 +198,98 @@
         init: function(config) {
             this.config = config || {};
             this.autoFix();
+        }
+    };
+
+        /**
+         * Show a "Test UPI Intent" panel.
+         * Call this from admin pages to let the store owner test payments.
+         * 
+         * @param {Object} config
+         * @param {string} config.pa - UPI ID to test
+         * @param {string} config.pn - Payee name
+         * @param {string} [config.containerId] - DOM element ID to inject panel into (creates one if missing)
+         */
+        showTestPanel: function(config) {
+            var self = this;
+            var pa = config.pa || '';
+            var pn = config.pn || '';
+            var containerId = config.containerId || 'upi-test-panel';
+
+            var container = document.getElementById(containerId);
+            if (!container) {
+                container = document.createElement('div');
+                container.id = containerId;
+                // Find a good place to inject - after main content or at end of admin-main
+                var adminMain = document.querySelector('.admin-main') || document.querySelector('main') || document.body;
+                adminMain.appendChild(container);
+            }
+
+            container.innerHTML = '' +
+                '<div style="margin-top:30px;padding:24px;background:#f8fafc;border:2px solid #2874f0;border-radius:12px;">' +
+                '  <h2 style="margin:0 0 8px;font-size:1.2em;color:#1e293b;">🔗 Test UPI Intent</h2>' +
+                '  <p style="color:#64748b;font-size:0.9em;margin-bottom:16px;">Test if payment goes through without risk policy errors. Enter ₹1 to test.</p>' +
+                '  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px;">' +
+                '    <div>' +
+                '      <label style="display:block;font-size:0.8em;color:#555;margin-bottom:4px;">UPI ID</label>' +
+                '      <input type="text" id="upi-test-pa" value="' + pa + '" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;width:220px;" readonly>' +
+                '    </div>' +
+                '    <div>' +
+                '      <label style="display:block;font-size:0.8em;color:#555;margin-bottom:4px;">Amount (₹)</label>' +
+                '      <input type="number" id="upi-test-amount" value="1" min="1" step="0.01" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;width:100px;">' +
+                '    </div>' +
+                '    <button id="upi-test-generate" style="padding:10px 20px;background:#2874f0;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:500;">Generate & Test</button>' +
+                '  </div>' +
+                '  <div id="upi-test-result" style="display:none;">' +
+                '    <div style="margin-bottom:12px;">' +
+                '      <label style="display:block;font-size:0.8em;color:#555;margin-bottom:4px;">Generated URL (unique tr each time):</label>' +
+                '      <code id="upi-test-url" style="display:block;padding:10px;background:#1e293b;color:#4ade80;border-radius:6px;font-size:0.8em;word-break:break-all;overflow-x:auto;"></code>' +
+                '    </div>' +
+                '    <div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+                '      <a id="upi-test-open" href="#" style="display:inline-block;padding:10px 20px;background:#388e3c;color:#fff;border-radius:6px;text-decoration:none;font-weight:500;">Open UPI App</a>' +
+                '      <a id="upi-test-gpay" href="#" style="display:inline-block;padding:10px 20px;background:#4285F4;color:#fff;border-radius:6px;text-decoration:none;font-weight:500;">Google Pay</a>' +
+                '      <a id="upi-test-phonepe" href="#" style="display:inline-block;padding:10px 20px;background:#5f259f;color:#fff;border-radius:6px;text-decoration:none;font-weight:500;">PhonePe</a>' +
+                '      <a id="upi-test-paytm" href="#" style="display:inline-block;padding:10px 20px;background:#00BAF2;color:#fff;border-radius:6px;text-decoration:none;font-weight:500;">Paytm</a>' +
+                '    </div>' +
+                '    <p id="upi-test-info" style="margin-top:10px;font-size:0.8em;color:#666;"></p>' +
+                '  </div>' +
+                '</div>';
+
+            // Generate button handler
+            document.getElementById('upi-test-generate').addEventListener('click', function() {
+                var testPa = document.getElementById('upi-test-pa').value;
+                var testAm = document.getElementById('upi-test-amount').value;
+                var tr = self.generateTr();
+                var tn = 'Test payment to ' + pn;
+
+                var url = self.buildUrl({ pa: testPa, pn: pn, am: testAm, tn: tn, tr: tr, scheme: 'upi' });
+
+                document.getElementById('upi-test-url').textContent = url;
+                document.getElementById('upi-test-open').href = url;
+                document.getElementById('upi-test-gpay').href = url; // GPay uses upi://
+                document.getElementById('upi-test-phonepe').href = url.replace('upi://pay?', 'phonepe://pay?');
+                document.getElementById('upi-test-paytm').href = url.replace('upi://pay?', 'paytmmp://pay?');
+                document.getElementById('upi-test-result').style.display = 'block';
+                document.getElementById('upi-test-info').textContent = 'TR: ' + tr + ' | Generated at: ' + new Date().toLocaleTimeString();
+            });
+
+            // Make app buttons regenerate tr on click too
+            ['upi-test-open', 'upi-test-gpay', 'upi-test-phonepe', 'upi-test-paytm'].forEach(function(id) {
+                document.getElementById(id).addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var testPa = document.getElementById('upi-test-pa').value;
+                    var testAm = document.getElementById('upi-test-amount').value;
+                    var freshTr = self.generateTr();
+                    var tn = 'Test payment to ' + pn;
+                    var scheme = 'upi';
+                    if (id.indexOf('phonepe') > -1) scheme = 'phonepe';
+                    if (id.indexOf('paytm') > -1) scheme = 'paytmmp';
+                    
+                    var freshUrl = self.buildUrl({ pa: testPa, pn: pn, am: testAm, tn: tn, tr: freshTr, scheme: scheme });
+                    document.getElementById('upi-test-info').textContent = 'Fresh TR: ' + freshTr + ' | ' + new Date().toLocaleTimeString();
+                    window.location.href = freshUrl;
+                });
+            });
         }
     };
 

@@ -123,7 +123,32 @@ function upi_get_intent_urls($params) {
 }
 
 /**
- * Render UPI intent buttons HTML with JavaScript that regenerates tr on each click.
+ * Render a "Check Intent" / Test UPI panel for admin pages.
+ * Outputs a section where admin can test if UPI intent works properly.
+ * 
+ * @param array $params - UPI config (pa, pn from admin settings)
+ * @return string HTML
+ */
+function upi_render_test_panel($params) {
+    $pa = $params['pa'] ?? '';
+    $pn = $params['pn'] ?? '';
+
+    ob_start();
+    ?>
+    <div id="upi-test-panel"></div>
+    <script src="/assets/js/upi-intent-fix.js"></script>
+    <script>
+        if (window.UPIIntentFix) {
+            UPIIntentFix.showTestPanel({
+                pa: <?= json_encode($pa) ?>,
+                pn: <?= json_encode($pn) ?>,
+                containerId: 'upi-test-panel'
+            });
+        }
+    </script>
+    <?php
+    return ob_get_clean();
+}
  * 
  * This is the KEY function - it outputs buttons that generate a FRESH unique
  * transaction reference every time they are clicked, avoiding risk policy flags.
